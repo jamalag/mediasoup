@@ -1,4 +1,9 @@
-//app.js
+/**
+ * integrating mediasoup server with a node.js application
+ */
+
+/* Please follow mediasoup installation requirements */
+/* https://mediasoup.org/documentation/v3/mediasoup/installation/ */
 import express from 'express'
 const app = express()
 
@@ -16,6 +21,7 @@ app.get('/', (req, res) => {
 
 app.use('/sfu', express.static(path.join(__dirname, 'public')))
 
+// SSL cert for HTTPS access
 const options = {
   key: fs.readFileSync('./server/ssl/key.pem', 'utf-8'),
   cert: fs.readFileSync('./server/ssl/cert.pem', 'utf-8')
@@ -28,8 +34,17 @@ httpsServer.listen(3000, () => {
 
 const io = new Server(httpsServer)
 
+// socket.io namespace (could represent a room?)
 const peers = io.of('/mediasoup')
 
+/**
+ * Worker
+ * |-> Router(s)
+ *     |-> Producer Transport(s)
+ *         |-> Producer
+ *     |-> Consumer Transport(s)
+ *         |-> Consumer 
+ **/
 let worker
 let router
 let producerTransport
@@ -45,6 +60,7 @@ const createWorker = async () => {
   console.log(`worker pid ${worker.pid}`)
 
   worker.on('died', error => {
+    // This implies something serious happened, so kill the application
     console.error('mediasoup worker has died')
     setTimeout(() => process.exit(1), 2000) // exit in 2 seconds
   })
@@ -52,8 +68,13 @@ const createWorker = async () => {
   return worker
 }
 
+// We create a Worker as soon as our application starts
 worker = createWorker()
 
+// These is an Array of RtpCapabilities
+// https://mediasoup.org/documentation/v3/mediasoup/rtp-parameters-and-capabilities/#RtpCodecCapability
+// list of media codecs supported by mediasoup ...
+// https://github.com/versatica/mediasoup/blob/v3/src/supportedRtpCapabilities.ts
 const mediaCodecs = [
   {
     kind: 'audio',
@@ -82,29 +103,46 @@ peers.on('connection', async socket => {
     console.log('peer disconnected')
   })
 
-  router = await worker.createRouter({ mediaCodecs })
+  // worker.createRouter(options)
+  // options = { mediaCodecs, appData }
+  // mediaCodecs -> defined above
+  // appData -> custom application data - we are not supplying any
+  // none of the two are required
+  router = await worker.createRouter({ mediaCodecs, })
 
+  // Client emits a request for RTP Capabilities
+  // This event responds to the request
   socket.on('getRtpCapabilities', (callback) => {
+
     const rtpCapabilities = router.rtpCapabilities
+
     console.log('rtp Capabilities', rtpCapabilities)
 
+    // call callback from the client and send back the rtpCapabilities
     callback({ rtpCapabilities })
   })
 
+  // Client emits a request to create server side Transport
+  // We need to differentiate between the producer and consumer transports
   socket.on('createWebRtcTransport', async ({ sender }, callback) => {
     console.log(`Is this a sender request? ${sender}`)
+    // The client indicates if it is a producer or a consumer
+    // if sender is true, indicates a producer else a consumer
     if (sender)
       producerTransport = await createWebRtcTransport(callback)
     else
       consumerTransport = await createWebRtcTransport(callback)
   })
 
+  // see client's socket.emit('transport-connect', ...)
   socket.on('transport-connect', async ({ dtlsParameters }) => {
     console.log('DTLS PARAMS... ', { dtlsParameters })
     await producerTransport.connect({ dtlsParameters })
   })
 
+  // see client's socket.emit('transport-produce', ...)
   socket.on('transport-produce', async ({ kind, rtpParameters, appData }, callback) => {
+    // call produce based on the prameters from the client
     producer = await producerTransport.produce({
       kind,
       rtpParameters,
@@ -117,11 +155,13 @@ peers.on('connection', async socket => {
       producer.close()
     })
 
+    // Send back to the client the Producer's id
     callback({
       id: producer.id
     })
   })
 
+  // see client's socket.emit('transport-recv-connect', ...)
   socket.on('transport-recv-connect', async ({ dtlsParameters }) => {
     console.log(`DTLS PARAMS: ${dtlsParameters}`)
     await consumerTransport.connect({ dtlsParameters })
@@ -129,10 +169,12 @@ peers.on('connection', async socket => {
 
   socket.on('consume', async ({ rtpCapabilities }, callback) => {
     try {
+      // check if the router can consume the specified producer
       if (router.canConsume({
         producerId: producer.id,
         rtpCapabilities
       })) {
+        // transport can now consume and return a consumer
         consumer = await consumerTransport.consume({
           producerId: producer.id,
           rtpCapabilities,
@@ -147,6 +189,8 @@ peers.on('connection', async socket => {
           console.log('producer of consumer closed')
         })
 
+        // from the consumer extract the following params
+        // to send back to the Client
         const params = {
           id: consumer.id,
           producerId: producer.id,
@@ -154,6 +198,7 @@ peers.on('connection', async socket => {
           rtpParameters: consumer.rtpParameters,
         }
 
+        // send the parameters to the client
         callback({ params })
       }
     } catch (error) {
@@ -174,10 +219,11 @@ peers.on('connection', async socket => {
 
 const createWebRtcTransport = async (callback) => {
   try {
+    // https://mediasoup.org/documentation/v3/mediasoup/api/#WebRtcTransportOptions
     const webRtcTransport_options = {
       listenIps: [
         {
-          ip: '0.0.0.0', // replace by relevant IP address
+          ip: '0.0.0.0', // replace with relevant IP address
           announcedIp: '127.0.0.1',
         }
       ],
@@ -186,6 +232,7 @@ const createWebRtcTransport = async (callback) => {
       preferUdp: true,
     }
 
+    // https://mediasoup.org/documentation/v3/mediasoup/api/#router-createWebRtcTransport
     let transport = await router.createWebRtcTransport(webRtcTransport_options)
     console.log(`transport id: ${transport.id}`)
 
@@ -199,7 +246,9 @@ const createWebRtcTransport = async (callback) => {
       console.log('transport closed')
     })
 
+    // send back to the client the following prameters
     callback({
+      // https://mediasoup.org/documentation/v3/mediasoup-client/api/#TransportOptions
       params: {
         id: transport.id,
         iceParameters: transport.iceParameters,
