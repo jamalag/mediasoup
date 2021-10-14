@@ -1,4 +1,4 @@
-# mediasoup
+# mediasoup - Youtube Video Tutorial Series
 YouTube mediasoup tutorial
 
 This code is a companion to the YouTube video (link below) demostrating how to integrate mediasoup SFU in a node.js application.
