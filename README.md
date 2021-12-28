@@ -13,3 +13,11 @@ the video covered the following:
 - create server WebRtcTransports (for both Producer & Consumer)
 - create client WebRtc[Send/Recv]Transport
 - how to call produce/consume from client and server side
+
+# Docker setup
+
+Tested on 
+```
+docker-compose version 1.24.0, build 0aa59064
+Docker version 18.09.6, build 481bc77
+```
