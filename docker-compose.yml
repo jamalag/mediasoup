@@ -1,0 +1,12 @@
+version: '3.5'
+
+services:
+  node_soup:
+    container_name: node_soup
+    build:
+      context: ./node      
+    volumes:
+       - ./example1:/usr/code
+    ports:
+      - "3000:3000"
+      - "2000-2020:2000-2020"    

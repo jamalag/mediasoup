@@ -1,0 +1,25 @@
+{
+  "name": "example1",
+  "version": "1.0.0",
+  "description": "mediasoup tutorials",
+  "main": "app.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "nodemon app.js",
+    "watch": "watchify public/index.js -o public/bundle.js -v"
+  },
+  "author": "amir eshaq",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.17.1",
+    "httpolyglot": "^0.1.2",
+    "mediasoup": "^3.8.3",
+    "mediasoup-client": "^3.6.37",
+    "socket.io": "^4.2.0",
+    "socket.io-client": "^4.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.12"
+  }
+}
